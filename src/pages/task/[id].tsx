@@ -1,13 +1,13 @@
 import { GetServerSideProps } from 'next';
 import styles from './style.module.css'
 import Head from 'next/head'
-import { useState, ChangeEvent, FormEvent } from 'react'
+import { useState, ChangeEvent, FormEvent, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 
 import { db } from '../../services/firebaseConnection'
-import { doc, collection, query, where, getDoc, addDoc, getDocs, deleteDoc } from 'firebase/firestore'
+import { doc, collection, query, where, getDoc, addDoc, getDocs, deleteDoc, updateDoc } from 'firebase/firestore'
 
-import { FaTrash } from 'react-icons/fa'
+import { FaTrash, FaPencilAlt } from 'react-icons/fa'
 
 import { Textarea } from '../../components/textArea'
 import Image from 'next/image';
@@ -38,6 +38,14 @@ export default function task({ item, allComments }: TaskProps) {
     const { data: session } = useSession()
     const [input, setInput] = useState("")
     const [comments, setComments] = useState<CommentProps[]>(allComments || [])
+    const [editComment, setEditComment] = useState<{
+        enabled: boolean;
+        id: string | null;
+    }>({
+        enabled: false,
+        id: null
+    })
+    const inputRef = useRef<HTMLTextAreaElement>(null);
         
     async function handleRegisterComment(event: FormEvent) {
         event.preventDefault();
@@ -53,27 +61,50 @@ export default function task({ item, allComments }: TaskProps) {
 
         try {
 
-            const docRef = await addDoc(collection(db, "comments"), {
-                comment: input,
-                created: new Date(),
-                user: session?.user?.email,
-                name: session?.user?.name,
-                profilePhoto: session?.user?.image,
-                taskId: item?.taskId,
-            });
+            if (editComment.enabled && editComment.id) {
+                const docRef = doc(db, "comments", editComment.id)
+                
+                await updateDoc(docRef, {
+                    comment: input,
+                })
+
+                setComments(oldItems =>
+                    oldItems.map(item =>
+                        item.id === editComment.id
+                            ? { ...item, comment: input }
+                            : item
+                    )
+                )
+                
+                toast.success("Comentário editado com sucesso!")
+
+                setEditComment({ enabled: false, id: null })
+                setInput("")
+
+            } else {
+                
+                const docRef = await addDoc(collection(db, "comments"), {
+                    comment: input,
+                    created: new Date(),
+                    user: session?.user?.email,
+                    name: session?.user?.name,
+                    profilePhoto: session?.user?.image,
+                    taskId: item?.taskId,
+                });
+                
+                const data = {
+                    id: docRef.id,
+                    comment: input, 
+                    user: session?.user?.email,
+                    name: session?.user?.name,
+                    profilePhoto: session?.user?.image,
+                    taskId: item?.taskId
+                };
+
+                setComments((oldItems) => [...oldItems, data])
+                toast.success("Comentário concluído com sucesso!")
+            }
             
-            const data = {
-                id: docRef.id,
-                comment: input, 
-                user: session?.user?.email,
-                name: session?.user?.name,
-                profilePhoto: session?.user?.image,
-                taskId: item?.taskId
-            };
-
-            setComments((oldItems) => [...oldItems, data])
-            toast.success("Comentário concluído com sucesso!")
-
             setInput("")
             
         } catch(err) {
@@ -94,7 +125,23 @@ export default function task({ item, allComments }: TaskProps) {
         } catch(err) {
             console.log(err)
         }
-    } 
+    }
+
+    async function handleEditTask(item: CommentProps) {
+        setInput(item.comment)
+
+        setEditComment({
+            enabled: true,
+            id: item.id
+        })
+
+        inputRef.current?.focus()
+    }
+
+    function handleCancelEdit() {
+        setEditComment({ enabled: false, id: null })
+        setInput("")
+    }
     
     return (
         <div className={styles.container}>
@@ -122,9 +169,23 @@ export default function task({ item, allComments }: TaskProps) {
                         placeholder='Digite seu comentário...'
                         value={input}
                         onChange={ (e: ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value) }
+                        ref={inputRef}
                     />
+
+                    <div className={styles.formButtons}>
+                        {editComment.enabled && (
+                            <button
+                                type='button'
+                                onClick={handleCancelEdit}
+                                className={styles.cancelButton}
+                            >
+                                cancelar edição
+                            </button>
+                        )}
+                    </div>
+
                     <button className={styles.button} disabled={!session?.user}>
-                        Enviar comentário
+                        {editComment.enabled ? "Salvar edição" : "Enviar comentário"}
                     </button>
                 </form>
                 
@@ -153,15 +214,26 @@ export default function task({ item, allComments }: TaskProps) {
                                 <label className={styles.commentsLabel}>{item.name}</label>
                             </div>
                             {item.user === session?.user?.email && (
-                                <button 
-                                    className={styles.buttonTrash}
-                                    onClick={() => handleDeleteComment(item.id)}
-                                >
-                                    <FaTrash
-                                        size={18}
-                                        color='#EA3140'
-                                    />
-                                </button>
+                                <div className={styles.buttonDivision}>
+                                    <button 
+                                        className={styles.buttonComments}
+                                        onClick={ () => handleEditTask(item) }
+                                    >
+                                        <FaPencilAlt
+                                            size={20}
+                                            color='#0000FF'
+                                        />
+                                    </button>
+                                    <button
+                                        className={styles.buttonComments}
+                                        onClick={() => handleDeleteComment(item.id)}
+                                    >
+                                        <FaTrash
+                                            size={20}
+                                            color='#EA3140'
+                                        />
+                                    </button>
+                                </div>
                             )}
                         </div>
                         <p>{item.comment}</p>

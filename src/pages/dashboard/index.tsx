@@ -1,15 +1,15 @@
 import { GetServerSideProps } from 'next';
-import { ChangeEvent, FormEvent, useState, useEffect } from 'react' 
+import { ChangeEvent, FormEvent, useState, useEffect, useRef } from 'react' 
 import styles from './styles.module.css'
 import Head from 'next/head';
 import { db } from '../../services/firebaseConnection'
-import { addDoc, collection, query, orderBy, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore'
+import { addDoc, collection, query, orderBy, where, onSnapshot, doc, deleteDoc, updateDoc } from 'firebase/firestore'
 
 import { getSession } from 'next-auth/react'
 
 import { TfiEmail } from "react-icons/tfi";
 import { FiX, FiShare2, FiLink } from 'react-icons/fi'
-import { FaTrash, FaShare, FaWhatsapp } from 'react-icons/fa'
+import { FaTrash, FaShare, FaWhatsapp, FaPencilAlt } from 'react-icons/fa'
 
 import { Textarea } from '../../components/textArea'
 import Link from 'next/link'
@@ -34,6 +34,14 @@ export default function Dashboard({ user }: HomeProps) {
     const [input, setInput] = useState("")
     const [publicTask, setPublicTask] = useState(false)
     const [tasks, setTasks] = useState<TaskProps[]>([])
+    const [editTask, setEditTask] = useState<{
+        enabled: boolean;
+        id: string | null;
+    }>({
+        enabled: false,
+        id: null
+    })
+    const inputRef = useRef<HTMLTextAreaElement>(null);
     
     const [shareTask, setShareTask] = useState<TaskProps | null>(null)
     const [isClosing, setIsClosing] = useState(false)
@@ -101,14 +109,32 @@ export default function Dashboard({ user }: HomeProps) {
         }
 
         try {
-            await addDoc(collection(db, "tarefas"), {
-                tarefa: input,
-                created: new Date(),
-                user: user?.email,
-                public: publicTask
-            });
 
-            toast.success("Tarefa adicionada com sucesso!")
+            if (editTask.enabled && editTask.id) {
+                const docRef = doc(db, "tarefas", editTask.id)
+
+                await updateDoc(docRef, {
+                    tarefa: input,
+                    public: publicTask
+                })
+
+                toast.success("Tarefa atualizada com sucesso!")
+
+                setEditTask({ enabled: false, id: null })
+                
+            } else {
+
+                await addDoc(collection(db, "tarefas"), {
+                    tarefa: input,
+                    created: new Date(),
+                    user: user?.email,
+                    public: publicTask
+                });
+
+                toast.success("Tarefa adicionada com sucesso!")
+
+            }
+
             setInput("");
             setPublicTask(false);
 
@@ -123,7 +149,26 @@ export default function Dashboard({ user }: HomeProps) {
         await deleteDoc(docRef)
         toast.success("Tarefa excluída com sucesso!")
     }
-    
+
+    async function handleEditTask(item: TaskProps) {
+        setInput(item.tarefa)
+        setPublicTask(item.public)
+
+        setEditTask({
+            enabled: true,
+            id: item.id
+        })
+
+        inputRef.current?.focus()
+    }
+
+    function handleCancelEdit() {
+        setEditTask({ enabled: false, id: null })
+        setInput("")
+        setPublicTask(false)
+    }
+
+   
     function getTaskUrl(task: TaskProps) {
         return `${process.env.NEXT_PUBLIC_URL}/task/${task.id}`
     }
@@ -182,20 +227,38 @@ export default function Dashboard({ user }: HomeProps) {
                                 placeholder='Digite qual sua tarefa...'
                                 value={input}
                                 onChange={ (e:ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value) }
+                                ref={inputRef}
                             />
                             
                             <div className={styles.checkboxArea}>
-                                <input 
-                                    type="checkbox" 
-                                    className={styles.checkbox}
-                                    checked={publicTask}
-                                    onChange={ handleChangePublic }
-                                />
-                                <label>Deixar tarefa pública</label>
+
+                                <div className={styles.containerCheckboxArea}>
+                                    <input
+                                        id='publicTask'
+                                        type="checkbox"
+                                        className={styles.checkbox}
+                                        checked={publicTask}
+                                        onChange={ handleChangePublic }
+                                    />
+                                    <label htmlFor='publicTask'>Deixar tarefa pública</label>
+                                </div>
+
+                                {editTask.enabled && (
+                                    <div className={styles.containerCancel}>
+                                        <button
+                                            type='button'
+                                            onClick={handleCancelEdit}
+                                            className={styles.cancelButton}
+                                        >
+                                            cancelar edição
+                                        </button>
+                                    </div>
+                                )}
+
                             </div>
 
                             <button type='submit' className={styles.button}>
-                                Registrar
+                                {editTask.enabled ? "Salvar edição" : "Registrar"}
                             </button>
                         </form>
                         
@@ -229,12 +292,22 @@ export default function Dashboard({ user }: HomeProps) {
                                     <p>{item.tarefa}</p>
                                 )}
                                 
-                                <button className={styles.trash} onClick={ () => handleDeleteTask(item.id) }>
-                                    <FaTrash 
-                                        size={24}
-                                        color='#EA3140'
-                                    />
-                                </button>
+                                <div className={styles.buttonDivision}>
+                                    <button className={styles.buttonTask} onClick={ () => handleEditTask(item) }>
+                                        <FaPencilAlt
+                                            size={24}
+                                            color='#0000FF'
+                                        />
+                                    </button>
+
+                                    <button className={styles.buttonTask} onClick={ () => handleDeleteTask(item.id) }>
+                                        <FaTrash
+                                            size={24}
+                                            color='#EA3140'
+                                        />
+                                    </button>
+                                </div>
+
                             </div>
                         </article>
                     ))}
