@@ -1,4 +1,0 @@
-    /*
-    await updateDoc(firestoreDoc(db, "cars", id!), carData);
-    toast.success("Carro atualizado com sucesso!");
-    */ 
