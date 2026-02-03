@@ -16,16 +16,14 @@ export function Header() {
                         </h1>
                     </Link>
 
-                    {session?.user && (
+                    {status === "authenticated" && (
                         <Link href="/dashboard" className={styles.link}>
                             Meu Painel
                         </Link>
                     )}
                 </nav>
 
-                { status === "loading" ? (
-                    <></>
-                ) : session ? (
+                { status === "loading" ? null : status === "authenticated" ? (
                     <button 
                         className={`${styles.loginButton} ${styles.userArea}`}
                         onClick={ () => signOut()}
